@@ -1,0 +1,48 @@
+# Per-push checks (v1.8, A-6): register generator, lint, golden model and a short set of RTL benches.
+# The full `make test` (incl. the Cheshire-based axi_vga bench) stays a local / session run; see docs/TOOLS.md.
+# Actions on Node.js 24 (checkout v5, cache v5, setup-python v6): the v4 / v4 / v5 majors ran on the deprecated Node.js 20.
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VERILATOR_VER: v5.052
+    steps:
+      - uses: actions/checkout@v5
+      - name: System packages
+        run: sudo apt-get update -q && sudo apt-get install -y -q flex libfl-dev help2man bison autoconf libegl1 libgl1
+      - name: Verilator cache
+        id: vcache
+        uses: actions/cache@v5
+        with:
+          path: ~/tools/verilator
+          key: verilator-${{ env.VERILATOR_VER }}-ubuntu-24.04
+      - name: Build Verilator
+        if: steps.vcache.outputs.cache-hit != 'true'
+        run: |
+          git clone -q --depth 1 --branch "$VERILATOR_VER" https://github.com/verilator/verilator /tmp/verilator
+          cd /tmp/verilator && autoconf && ./configure -q --prefix="$HOME/tools/verilator"
+          make -j"$(nproc)" >/dev/null && make install >/dev/null
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Python packages
+        run: pip install -q cocotb==2.1.0 cocotbext-axi==0.1.28 pytest pyyaml jinja2 pybind11==3.1.0 numpy pillow matplotlib
+      - name: Generated files up to date (committed copies, before anything regenerates them)
+        run: make regs-check
+      - name: Lint
+        run: source scripts/env.sh && make lint
+      - name: Golden model
+        run: source scripts/env.sh && make model JOBS=4
+      - name: RTL benches (short set)
+        run: |
+          source scripts/env.sh
+          G2D_MODEL_PATH=build/model python scripts/regress.py --seeds 1 --jobs 4 --coverage-report "" \
+            --out build/regress/ci --nodes dv/tests/test_common.py dv/tests/test_csr_regs.py dv/tests/test_csr_top.py \
+            dv/tests/test_cdc.py dv/tests/test_sdiv.py dv/tests/test_edge_load.py dv/tests/test_draw_check.py \
+            dv/tests/test_xform.py dv/tests/test_grad.py dv/tests/test_sampler.py dv/tests/test_feat.py dv/tests/test_ps2.py \
+            dv/tests/test_adapt.py dv/tests/test_axi2axil.py

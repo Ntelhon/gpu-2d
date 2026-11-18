@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Generate the Genesys2 FPGA top with G2D from Cheshire's target/xilinx/src/cheshire_top_xilinx.sv (Phase 7).
+
+  gen_top.py <CHS_ROOT> <out.sv> [--async] [--trim] [--ps2]
+
+The output is Cheshire's top (Solderpad licence header kept) with three changes: the configuration comes from
+g2d_chs_pkg::gen_cfg(0), G2D (fpga/cheshire/g2d_cheshire.sv) is instantiated, and it is wired to the external AXI
+manager / subordinate ports and external interrupt 0. With --async (v1.1) G2D's core runs on its own 100 MHz clock and both G2D ports go through the
+CDC (g2d_cheshire CoreAsync = 1): Cheshire's clock wizard is replaced by g2d_clkwiz (the same configuration with its
+unused fourth output at 100 MHz instead of 10 MHz, fpga/genesys2/g2d_clkwiz_ip.tcl), whose clk_100 is the core clock;
+fpga/cheshire/g2d_core_rst.sv makes the core reset; the board clock gets an explicit BUFG (see below). Every replacement must match exactly once, so a Cheshire
+update that moves these lines fails here instead of producing a wrong top. The generated file is not committed.
+With --trim (v1.2) the configuration is g2d_chs_pkg::gen_cfg(0, 1): USB, iDMA, bus-error units and I2C off. The
+top's pins stay as they are (Cheshire ties the outputs of disabled units off).
+With --ps2 (DOOM side project) chs_ps2 (fpga/periph/chs_ps2.sv) is the second external register slave (0x4300_1000,
+g2d_chs_pkg::gen_cfg(.., ps2 = 1)) with the Genesys2 USB HID pins ps2_clk_i / ps2_data_i and the VGA vsync as its
+frame-counter input.
+"""
+import sys
+
+G2D_BLOCK = """  /////////
+  // G2D //
+  /////////
+
+  axi_mst_req_t g2d_mem_req;
+  axi_mst_rsp_t g2d_mem_rsp;
+  axi_slv_req_t g2d_csr_req;
+  axi_slv_rsp_t g2d_csr_rsp;
+  logic         g2d_irq;
+@CORE_DECL@
+@CORE_CLK@
+  g2d_cheshire #(
+    .AxiAddrWidth ( FPGACfg.AddrWidth        ),
+    .AxiDataWidth ( FPGACfg.AxiDataWidth     ),
+    .AxiUserWidth ( FPGACfg.AxiUserWidth     ),
+    .SlvIdWidth   ( $bits(g2d_csr_req.aw.id) ),
+    .MstIdWidth   ( FPGACfg.AxiMstIdWidth    ),
+    .slv_req_t    ( axi_slv_req_t            ),
+    .slv_rsp_t    ( axi_slv_rsp_t            ),
+    .mst_req_t    ( axi_mst_req_t            ),
+    .mst_rsp_t    ( axi_mst_rsp_t            ),
+    .CoreAsync    ( @ASYNC@                  ),
+    .Features     ( @FEATURES@               )
+  ) i_g2d (
+    .clk_i       ( soc_clk      ),
+    .rst_ni      ( rst_n        ),
+    .core_clk_i  ( g2d_core_clk ),
+    .core_rst_ni ( g2d_core_rst_n ),
+    .csr_req_i ( g2d_csr_req ),
+    .csr_rsp_o ( g2d_csr_rsp ),
+    .mem_req_o ( g2d_mem_req ),
+    .mem_rsp_i ( g2d_mem_rsp ),
+    .irq_o     ( g2d_irq     )
+  );
+
+"""
+
+
+CORE_CLK_ASYNC = """  // g2d_core_clk: clk_100 of g2d_clkwiz (100 MHz, user decision 2026-10-18)
+  g2d_core_rst i_g2d_rst (
+    .core_clk_i  ( g2d_core_clk      ),
+    .locked_i    ( g2d_clkwiz_locked ),
+    .rst_ni      ( rst_n             ),
+    .core_rst_no ( g2d_core_rst_n    )
+  );
+"""
+
+CORE_CLK_SYNC = """  assign g2d_core_clk   = soc_clk;   // unused by g2d_cheshire (CoreAsync = 0)
+  assign g2d_core_rst_n = rst_n;
+"""
+
+
+PS2_BLOCK = """  ////////////////////////////////
+  // PS/2 keyboard (DOOM, D3)   //
+  ////////////////////////////////
+
+  reg_req_t [1:0] ext_reg_req;
+  reg_rsp_t [1:0] ext_reg_rsp;
+  logic [31:0]    ps2_rdata;
+  assign cfg_reg_req    = ext_reg_req[0];
+  assign ext_reg_rsp[0] = cfg_reg_rsp;
+  // register bus: every valid cycle is one access (ready = 1)
+  chs_ps2 i_chs_ps2 (
+    .clk_i      ( soc_clk                      ),
+    .rst_ni     ( rst_n                        ),
+    .ps2_clk_i,
+    .ps2_data_i,
+    .vsync_i    ( vga_vsync_o                  ),
+    .req_i      ( ext_reg_req[1].valid         ),
+    .we_i       ( ext_reg_req[1].write         ),
+    .addr_i     ( ext_reg_req[1].addr[3:2]     ),
+    .wdata_i    ( ext_reg_req[1].wdata         ),
+    .rdata_o    ( ps2_rdata                    )
+  );
+  assign ext_reg_rsp[1] = '{rdata: ps2_rdata, error: 1'b0, ready: 1'b1};
+
+"""
+
+
+def main():
+    args = [a for a in sys.argv[1:] if a not in ("--async", "--trim", "--ps2")]
+    ps2 = "--ps2" in sys.argv[1:]
+    import os
+    # G2D_FPGA_TRIM_MASK (hex, bit 0 USB, 1 iDMA, 2 bus-error units, 3 I2C) overrides --trim (= F); Q-FPGA-9
+    trim_mask = int(os.environ["G2D_FPGA_TRIM_MASK"], 16) if os.environ.get("G2D_FPGA_TRIM_MASK") else (0xF if "--trim" in sys.argv[1:] else 0)
+    is_async = "--async" in sys.argv[1:]
+    trim = "--trim" in sys.argv[1:]
+    if len(args) != 2:
+        sys.exit(__doc__)
+    s = open(args[0] + "/target/xilinx/src/cheshire_top_xilinx.sv").read()
+
+    def rep(a, b):
+        nonlocal s
+        if s.count(a) != 1:
+            sys.exit("gen_top.py: expected exactly one match of %r in Cheshire's top" % a[:60])
+        s = s.replace(a, b)
+
+    rep("// Yvan Tortorella <yvan.tortorella@gmail.com>\n",
+        "// Yvan Tortorella <yvan.tortorella@gmail.com>\n//\n"
+        "// GENERATED by fpga/scripts/gen_top.py (G2D project, Phase 7) from Cheshire's cheshire_top_xilinx.sv:\n"
+        "// configuration g2d_chs_pkg::gen_cfg(0%s); G2D on the external AXI ports and external interrupt 0" %
+        (", 1 (trimmed: no USB, iDMA, bus-error units, I2C)" if trim else "") +
+        ("; G2D core on its own 100 MHz clock (--async)" if is_async else "") +
+        ("; PS/2 keyboard receiver chs_ps2 (--ps2).\n" if ps2 else ".\n"))
+    rep("module cheshire_top_xilinx import cheshire_pkg::*; #(", "module g2d_chs_top_xilinx import cheshire_pkg::*; #(")
+    a = s.index("  // Use default config as far as possible\n  function automatic cheshire_cfg_t gen_cheshire_xilinx_cfg();")
+    b = s.index("  // Configure cheshire for FPGA mapping")
+    s = s[:a] + "  // Genesys2 configuration of the original top plus G2D (fpga/cheshire/g2d_chs_pkg.sv)\n" + s[b:]
+    rep("  localparam cheshire_cfg_t FPGACfg = gen_cheshire_xilinx_cfg();",
+        "  localparam cheshire_cfg_t FPGACfg = g2d_chs_pkg::gen_cfg(0, 4'h%X, %d);" % (trim_mask, int(ps2)))
+    import os
+    feats = os.environ.get("G2D_FPGA_FEATURES", "111111")   # 6 binary digits, g2d_pkg FEAT_* (bit 5 mask .. 0 families)
+    block = G2D_BLOCK.replace("@ASYNC@", "1'b1" if is_async else "1'b0").replace("@FEATURES@", "6'b" + feats) \
+                     .replace("@CORE_DECL@", "  logic         g2d_core_rst_n;\n" if is_async else
+                              "  logic         g2d_core_clk, g2d_core_rst_n;\n") \
+                     .replace("@CORE_CLK@", CORE_CLK_ASYNC if is_async else CORE_CLK_SYNC)
+    rep("  //////////////////\n  // Cheshire SoC //\n  //////////////////\n",
+        block + "  //////////////////\n  // Cheshire SoC //\n  //////////////////\n")
+    if is_async:
+        # same clock wizard configuration, fourth output 100 MHz (G2D core) instead of Cheshire's unused 10 MHz
+        rep("  clkwiz i_clkwiz (\n", "  g2d_clkwiz i_clkwiz (\n")
+        rep("    .locked   ( ),\n", "    .locked   ( g2d_clkwiz_locked ),\n")
+        rep("    .clk_10   ( )\n", "    .clk_100  ( g2d_core_clk )\n")
+        rep("  wire usb_clk;\n", "  wire usb_clk;\n  wire g2d_clkwiz_locked;\n  wire g2d_core_clk;\n")
+        # The board clock goes through a BUFG before the clock wizard and the MIG, as opt_design made it in the passing
+        # single-clock build (sys_clk_BUFG_inst, 49 loads). In the async build opt_design did not insert it and the
+        # clock placer failed (Place 30-575, rule_gclkio_mmcm_2loads: an IOB may drive two MMCMs directly only from
+        # its own and the adjacent clock region); the explicit BUFG makes the structure independent of that choice.
+        rep("    .O  ( sys_clk   )\n  );\n",
+            "    .O  ( sys_clk_ibuf )\n  );\n\n  BUFG i_bufg_sys_clk (\n    .I ( sys_clk_ibuf ),\n    .O ( sys_clk      )\n  );\n")
+        rep("  wire sys_clk;\n", "  wire sys_clk_ibuf;\n  wire sys_clk;\n")
+    rep("    .axi_ext_mst_req_i  ( '0 ),\n    .axi_ext_mst_rsp_o  ( ),\n"
+        "    .axi_ext_slv_req_o  ( ),\n    .axi_ext_slv_rsp_i  ( '0 ),",
+        "    .axi_ext_mst_req_i  ( g2d_mem_req ),\n    .axi_ext_mst_rsp_o  ( g2d_mem_rsp ),\n"
+        "    .axi_ext_slv_req_o  ( g2d_csr_req ),\n    .axi_ext_slv_rsp_i  ( g2d_csr_rsp ),")
+    rep("    .intr_ext_i         ( '0 ),", "    .intr_ext_i         ( g2d_irq ),")
+    # v1.8 (Q-FPGA-11): DOOM build: DRAM above the program region bypasses the LLC (g2d_chs_pkg::llc_cached_end)
+    rep("    .Cfg                ( FPGACfg ),\n",
+        "    .Cfg                ( FPGACfg ),\n    .LlcCachedRegionEnd ( g2d_chs_pkg::llc_cached_end(FPGACfg, %d) ),\n"
+        % int(ps2))
+    if ps2:
+        rep("  output logic        vga_vsync_o,\n", "  output logic        vga_vsync_o,\n"
+            "  // Genesys2 USB HID (PIC24 USB -> PS/2), DOOM side project\n  input  logic        ps2_clk_i,\n"
+            "  input  logic        ps2_data_i,\n")
+        rep("    .reg_ext_slv_req_o  ( cfg_reg_req ),\n    .reg_ext_slv_rsp_i  ( cfg_reg_rsp ),\n",
+            "    .reg_ext_slv_req_o  ( ext_reg_req ),\n    .reg_ext_slv_rsp_i  ( ext_reg_rsp ),\n")
+        rep("  //////////\n  // LEDs //\n  //////////\n", PS2_BLOCK + "  //////////\n  // LEDs //\n  //////////\n")
+    open(args[1], "w").write(s)
+
+
+if __name__ == "__main__":
+    main()

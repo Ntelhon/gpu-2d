@@ -1,0 +1,8 @@
+%rename startfile chs_old_startfile
+%rename endfile chs_old_endfile
+
+*startfile:
+crt1.o%s crti.o%s crtbeginS.o%s
+
+*endfile:
+crtendS.o%s crtn.o%s

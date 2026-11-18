@@ -1,0 +1,471 @@
+# G2D register map: SINGLE SOURCE OF TRUTH.
+# Processed by scripts/gen_regs.py into:
+#   rtl/pkg/generated/g2d_csr_pkg.sv     CSR offsets, reg2hw/hw2reg structs
+#   rtl/pkg/generated/g2d_state_pkg.sv   state register indices and field positions
+#   rtl/csr/generated/g2d_csr_regs.sv    CSR register file (bus-agnostic reg interface)
+#   sw/include/generated/g2d_regs.h      C macros for CSR and state
+#   docs/regs.md                         register documentation
+# Never edit generated files; edit this file and run `make regs`.
+#
+# Field access types (csr block):
+#   rw     read/write, value to hardware (reg2hw.<reg>.<field>.q)
+#   ro     read-only, value from hardware (hw2reg.<reg>.<field>.d)
+#   const  read-only constant = reset value
+#   w1c    hardware sets bits (hw2reg.<reg>.<field>.set, one-cycle pulse per bit); software writes 1 to clear;
+#          value to hardware (reg2hw.<reg>.<field>.q). A soft reset (arch.md 2.2) returns w1c fields to reset.
+#   wo     write-only; hardware gets the written data (q) and a one-cycle strobe (qe); reads return 0
+# State block fields are plain bit fields written by LOAD_STATE (commands.md); "access" is not used there.
+
+name: g2d
+version: {major: 0, minor: 4, patch: 0}
+
+blocks:
+  csr:
+    desc: Memory-mapped control/status registers (AXI4-Lite, 32-bit, 4 KB window).
+    addr_bits: 12
+    registers:
+      - name: ID
+        offset: 0x000
+        desc: IP identifier, ASCII "G2D ".
+        fields:
+          - {name: VALUE, bits: "31:0", access: const, reset: 0x47324420}
+      - name: VERSION
+        offset: 0x004
+        desc: IP version (from the version key of this file).
+        fields:
+          - {name: PATCH, bits: "7:0",   access: const, reset: version.patch}
+          - {name: MINOR, bits: "15:8",  access: const, reset: version.minor}
+          - {name: MAJOR, bits: "23:16", access: const, reset: version.major}
+      - name: HWCFG
+        offset: 0x008
+        desc: Build-time configuration.
+        fields:
+          - {name: DATA_BYTES, bits: "7:0",   access: ro, desc: "AXI master data width in bytes (8 or 16)."}
+          - {name: ADDR_W,     bits: "15:8",  access: ro, desc: "AXI master address width."}
+          - {name: KICK_DEPTH, bits: "20:16", access: ro, desc: "Kick queue depth."}
+          - {name: CFG_ASYNC,  bits: "24",    access: ro, desc: "Config-port CDC present."}
+          - {name: MEM_ASYNC,  bits: "25",    access: ro, desc: "Memory-port CDC present."}
+          - {name: FEAT_FAMILY, bits: "26",   access: ro, desc: "Blend families OpenVG / SVG2 / Porter-Duff built (v1.7, EN_FAMILY)."}
+          - {name: FEAT_GAUSS,  bits: "27",   access: ro, desc: "Gaussian filter built (v1.7, EN_GAUSS)."}
+          - {name: FEAT_YUV,    bits: "28",   access: ro, desc: "YUV sources built (v1.7, EN_YUV)."}
+          - {name: FEAT_COLOR,  bits: "29",   access: ro, desc: "Colour unit built (v1.7, EN_COLOR)."}
+          - {name: FEAT_RADIAL, bits: "30",   access: ro, desc: "Radial gradient built (v1.7, EN_RADIAL)."}
+          - {name: FEAT_MASK,   bits: "31",   access: ro, desc: "Mask layer built (v1.7, EN_MASK)."}
+      - name: SCRATCH
+        offset: 0x00C
+        desc: Scratch register for bus tests.
+        fields:
+          - {name: VALUE, bits: "31:0", access: rw, reset: 0}
+      - name: CTRL
+        offset: 0x010
+        desc: Control.
+        fields:
+          - {name: SOFT_RESET, bits: "0", access: wo, desc: "Write 1: graceful soft reset (arch.md 2.2)."}
+      - name: STATUS
+        offset: 0x014
+        desc: Status.
+        fields:
+          - {name: IDLE,            bits: "0",    access: ro, desc: "Kick queue empty, no command or draw in flight, no AXI outstanding."}
+          - {name: HALTED,          bits: "1",    access: ro, desc: "Stopped by an error; needs soft reset."}
+          - {name: SOFT_RESET_BUSY, bits: "2",    access: ro, desc: "Soft reset in progress."}
+          - {name: CMD_ACTIVE,      bits: "3",    access: ro, desc: "Commands still executing: the command side is live or the engines are not drained (v1.4, Q-RTL-9; arch.md 8). After an AXI_RD halt, 0 means the halt has settled even with kicks queued."}
+          - {name: KICK_FREE,       bits: "12:8", access: ro, desc: "Free kick queue entries."}
+      - name: IRQ_STATUS
+        offset: 0x018
+        desc: Interrupt status, write 1 to clear.
+        fields:
+          - {name: FENCE, bits: "0", access: w1c, reset: 0, desc: "A FENCE with IRQ=1 completed."}
+          - {name: ERROR, bits: "1", access: w1c, reset: 0, desc: "An ERR_STATUS bit was set."}
+          - {name: IDLE,  bits: "2", access: w1c, reset: 0, desc: "Entered idle."}
+      - name: IRQ_ENABLE
+        offset: 0x01C
+        desc: Interrupt enable (same bit layout as IRQ_STATUS).
+        fields:
+          - {name: FENCE, bits: "0", access: rw, reset: 0}
+          - {name: ERROR, bits: "1", access: rw, reset: 0}
+          - {name: IDLE,  bits: "2", access: rw, reset: 0}
+      - name: CMD_ADDR
+        offset: 0x020
+        desc: Address of the next command buffer to kick (8-byte aligned).
+        fields:
+          - {name: ADDR, bits: "31:3", access: rw, reset: 0}
+      - name: CMD_KICK
+        offset: 0x024
+        desc: Write pushes {CMD_ADDR, SIZE} into the kick queue.
+        fields:
+          - {name: SIZE, bits: "23:0", access: wo, desc: "Buffer size in bytes, multiple of 8, non-zero."}
+      - name: FENCE_SEQ
+        offset: 0x028
+        desc: Value of the last completed FENCE command.
+        fields:
+          - {name: VALUE, bits: "31:0", access: ro}
+      - name: ERR_STATUS
+        offset: 0x02C
+        desc: Error flags (arch.md 8). Write 1 to clear; HALTED still needs a soft reset.
+        fields:
+          - {name: CMD_DECODE, bits: "0", access: w1c, reset: 0}
+          - {name: BAD_STATE,  bits: "1", access: w1c, reset: 0}
+          - {name: ADDR_RANGE, bits: "2", access: w1c, reset: 0}
+          - {name: AXI_RD,     bits: "3", access: w1c, reset: 0}
+          - {name: AXI_WR,     bits: "4", access: w1c, reset: 0}
+          - {name: KICK_OVF,   bits: "5", access: w1c, reset: 0}
+      - name: ERR_ADDR
+        offset: 0x030
+        desc: Memory address of the first faulting transaction (low 32 bits).
+        fields:
+          - {name: ADDR, bits: "31:0", access: ro}
+      - name: ERR_CMD_ADDR
+        offset: 0x034
+        desc: Address of the command header being executed when the first error occurred.
+        fields:
+          - {name: ADDR, bits: "31:0", access: ro}
+      - name: MEM_BASE_HI
+        offset: 0x038
+        desc: Upper AXI address bits [ADDR_W-1:32] for all GPU accesses (ignored when ADDR_W = 32).
+        fields:
+          - {name: ADDR, bits: "31:0", access: rw, reset: 0}
+      - name: ADDR_WIN_LO
+        offset: 0x040
+        desc: Lowest permitted GPU address (inclusive), 64-byte granular (rendering.md 13.2).
+        fields:
+          - {name: ADDR, bits: "31:6", access: rw, reset: 0x0000000}
+      - name: ADDR_WIN_HI
+        offset: 0x044
+        desc: Highest permitted GPU address (inclusive); the low 6 bits always read as 1 (rendering.md 13.2).
+        fields:
+          - {name: ONES, bits: "5:0",  access: const, reset: 0x3F}
+          - {name: ADDR, bits: "31:6", access: rw, reset: 0x3FFFFFF}
+      - name: CUR_CMD_ADDR
+        offset: 0x048
+        desc: Address of the command word currently being parsed (debug).
+        fields:
+          - {name: ADDR, bits: "31:0", access: ro}
+      - name: DBG_CTRL
+        offset: 0x04C
+        desc: Debug control (v1.8, arch.md 9.1).
+        fields:
+          - {name: SIG_CLEAR, bits: "0", access: wo, desc: "Write 1: restart the write signature (WR_SIG reads 0)."}
+      - name: DBG_STATUS
+        offset: 0x050
+        desc: >-
+          Debug status (v1.8, arch.md 9.1). RAM_COLL bit i is set when on-chip RAM i was read and written at the same
+          address in one cycle (undefined data on a real RAM; never happens by design): 0 raster edge buffer,
+          1 raster state buffers, 2 raster active list, 3 winding accumulator, 4 write combiner, 5 source cache,
+          6 gradient ramp. Write 1 to clear.
+        fields:
+          - {name: RAM_COLL, bits: "6:0", access: w1c, reset: 0}
+      - name: WR_SIG
+        offset: 0x054
+        desc: >-
+          Write signature (v1.8, arch.md 9.1): CRC-32 (IEEE 802.3, as zlib.crc32) over the bytes of every AXI W beat
+          since reset or DBG_CTRL.SIG_CLEAR, byte lanes in order, lanes with WSTRB = 0 counted as 0x00. Not changed by
+          a soft reset.
+        fields:
+          - {name: VALUE, bits: "31:0", access: ro}
+      - name: MEM_ATTR
+        offset: 0x058
+        desc: >-
+          AXI attributes of the memory port (v1.9, arch.md 4.2). Used by every burst request issued after the write;
+          a request already waiting on the bus keeps its values. Reset values are the fixed values of v1.0..v1.8
+          (normal non-cacheable bufferable, unprivileged secure data access, QoS 0).
+        fields:
+          - {name: AR_CACHE, bits: "3:0",   access: rw, reset: 0x3}
+          - {name: AR_PROT,  bits: "6:4",   access: rw, reset: 0}
+          - {name: AR_QOS,   bits: "11:8",  access: rw, reset: 0}
+          - {name: AW_CACHE, bits: "19:16", access: rw, reset: 0x3}
+          - {name: AW_PROT,  bits: "22:20", access: rw, reset: 0}
+          - {name: AW_QOS,   bits: "27:24", access: rw, reset: 0}
+      - name: MEM_QOS
+        offset: 0x05C
+        desc: >-
+          Memory-port throttle (v1.9, arch.md 4.2.1). RD_MAX / WR_MAX: at most this many read / write bursts
+          outstanding (0 = only the build-time limit RD_OUTSTANDING / WR_OUTSTANDING). RD_GAP / WR_GAP: at least
+          this many cycles without a request handshake after each AR / AW handshake (0 = none). Reset = off, which
+          is cycle-identical to v1.8. A request already waiting on the bus is never withdrawn.
+        fields:
+          - {name: RD_MAX, bits: "4:0",   access: rw, reset: 0}
+          - {name: WR_MAX, bits: "12:8",  access: rw, reset: 0}
+          - {name: RD_GAP, bits: "23:16", access: rw, reset: 0}
+          - {name: WR_GAP, bits: "31:24", access: rw, reset: 0}
+      - name: PERF_CTRL
+        offset: 0x080
+        desc: Performance counter control.
+        fields:
+          - {name: EN,       bits: "0", access: rw, reset: 0}
+          - {name: CLEAR,    bits: "1", access: wo, desc: "Write 1: clear all counters."}
+          - {name: SNAPSHOT, bits: "2", access: wo, desc: "Write 1: copy all counters to the readable shadows."}
+      - {name: PERF_CYCLES,         offset: 0x084, desc: "Cycles while EN.",                         fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_BUSY_CYCLES,    offset: 0x088, desc: "Cycles while not IDLE.",                   fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_DRAWS,          offset: 0x08C, desc: "Draw commands completed.",                 fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_PIXELS_OUT,     offset: 0x090, desc: "Pixels written.",                          fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_RD_BEATS,       offset: 0x094, desc: "AXI R beats accepted.",                    fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_WR_BEATS,       offset: 0x098, desc: "AXI W beats sent.",                        fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_RD_STALL,       offset: 0x09C, desc: "Cycles with AR or R back-pressure.",       fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_WR_STALL,       offset: 0x0A0, desc: "Cycles with AW, W or B back-pressure.",    fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_DRAIN_CYC,      offset: 0x0A4, desc: "Cycles spent in draw-ordering drains.",    fields: [{name: VALUE, bits: "31:0", access: ro}]}
+      - {name: PERF_SRC_CACHE_MISS, offset: 0x0A8, desc: "Source cache line misses.",                fields: [{name: VALUE, bits: "31:0", access: ro}]}
+
+  state:
+    desc: Pipeline state registers, written by LOAD_STATE (commands.md). Index = 32-bit word index.
+    size: 128
+    registers:
+      - {name: TGT_ADDR,   index: 0x00, desc: "Target buffer GPU address.", fields: [{name: ADDR, bits: "31:0", reset: 0}]}
+      - {name: TGT_STRIDE, index: 0x01, desc: "Target stride in bytes.",    fields: [{name: STRIDE, bits: "15:0", reset: 0}]}
+      - name: TGT_SIZE
+        index: 0x02
+        desc: Target dimensions (1..8192).
+        fields:
+          - {name: W, bits: "13:0",  reset: 0}
+          - {name: H, bits: "29:16", reset: 0}
+      - name: TGT_FMT
+        index: 0x03
+        desc: Target pixel format (rendering.md 3.2).
+        fields:
+          - {name: FMT,    bits: "7:0", reset: 0}
+          - {name: DITHER, bits: "8",   reset: 0, desc: "Ordered 4x4 dither on R, G, B channels packed to fewer than 8 bits (rendering.md 3.6)."}
+          - {name: FLIP_Y, bits: "9",   reset: 0, desc: "Target row y stored at row H - 1 - y (rendering.md 5.8, v1.6)."}
+      - name: CLIP_MIN
+        index: 0x04
+        desc: Scissor, inclusive minimum.
+        fields:
+          - {name: X0, bits: "13:0",  reset: 0}
+          - {name: Y0, bits: "29:16", reset: 0}
+      - name: CLIP_MAX
+        index: 0x05
+        desc: Scissor, exclusive maximum (up to 8192).
+        fields:
+          - {name: X1, bits: "13:0",  reset: 0}
+          - {name: Y1, bits: "29:16", reset: 0}
+      - name: BLEND
+        index: 0x08
+        desc: Blend mode (rendering.md 5.6, 5.7).
+        fields:
+          - {name: MODE, bits: "3:0", reset: 0}
+          - {name: FAMILY, bits: "5:4", reset: 0, desc: "0 VG_LITE modes (5.6), 1 OpenVG, 2 SVG2, 3 Porter-Duff (BLEND_FUNC) (5.7, v1.6)."}
+      - name: ALPHA_CTRL
+        index: 0x09
+        desc: Global alpha (rendering.md 5.3, 5.5). Modes 0=NORMAL 1=GLOBAL 2=SCALED.
+        fields:
+          - {name: SRC_MODE,  bits: "1:0",   reset: 0}
+          - {name: DST_MODE,  bits: "3:2",   reset: 0}
+          - {name: SRC_VALUE, bits: "15:8",  reset: 255}
+          - {name: DST_VALUE, bits: "23:16", reset: 255}
+      - name: PAINT_CTRL
+        index: 0x0A
+        desc: Paint source and image options.
+        fields:
+          - {name: SRC,        bits: "1:0", reset: 0, desc: "0 SOLID, 1 IMAGE, 2 LINEAR_GRAD, 3 RADIAL_GRAD (rendering.md 10.4)."}
+          - {name: IMG_MUL,    bits: "2",   reset: 0, desc: "Image mode MULTIPLY by PAINT_COLOR."}
+          - {name: SRC_PREMUL, bits: "3",   reset: 0, desc: "Premultiply source texels on read."}
+          - {name: FILTER,     bits: "4",   reset: 0, desc: "0 POINT, 1 BILINEAR."}
+          - {name: PERSP,      bits: "5",   reset: 0, desc: "Perspective divide enable."}
+          - {name: SPREAD,     bits: "7:6", reset: 0, desc: "Gradient spread: 0 PAD, 1 REPEAT, 2 REFLECT, 3 FILL."}
+          - {name: WRAP,       bits: "10:8", reset: 0, desc: "Image wrap: 0 NONE, 1 COLOR, 2 PAD, 3 REPEAT, 4 REFLECT (rendering.md 7.5)."}
+          - {name: STENCIL,    bits: "12", reset: 0, desc: "Stencil image mode: the image is per-channel alpha for PAINT_COLOR (rendering.md 5.3.1, v1.6)."}
+          - {name: BORDER_SOLID, bits: "11", reset: 0, desc: "WRAP = COLOR only: 0 the border colour is a texel (default), 1 a plain colour for pixels whose sample centre is outside (rendering.md 7.5)."}
+          - {name: GAUSS,      bits: "13", reset: 0, desc: "3 x 3 Gaussian filter with GAUSS_W, overrides FILTER (rendering.md 7.3, v1.6b)."}
+      - {name: PAINT_COLOR, index: 0x0B, desc: "Solid paint / multiply colour, ARGB32 (A<<24|R<<16|G<<8|B).", fields: [{name: ARGB, bits: "31:0", reset: 0}]}
+      - name: GAUSS_W
+        index: 0x0D
+        desc: Gaussian edge and corner weights (rendering.md 7.3, v1.6b), signed s3.12.
+        fields:
+          - {name: W1, bits: "15:0",  reset: 0, desc: "Edge weight, signed, 1/4096 units."}
+          - {name: W2, bits: "31:16", reset: 0, desc: "Corner weight, signed, 1/4096 units."}
+      - name: GAUSS_W0
+        index: 0x0E
+        desc: Gaussian centre weight (rendering.md 7.3, v1.6b), signed s3.12.
+        fields:
+          - {name: W0, bits: "15:0", reset: 0, desc: "Centre weight, signed, 1/4096 units."}
+      - name: RAST_CTRL
+        index: 0x0C
+        desc: Path rasterizer control.
+        fields:
+          - {name: FILL_RULE, bits: "0", reset: 0, desc: "0 NON_ZERO, 1 EVEN_ODD."}
+          - {name: AA,        bits: "1", reset: 1, desc: "1 = 16 samples, 0 = 1 sample."}
+      - {name: CKEY0_LO, index: 0x10, desc: "Colour key 0 low bound and enable.",  fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: EN, bits: "31", reset: 0}]}
+      - {name: CKEY0_HI, index: 0x11, desc: "Colour key 0 high bound and alpha.", fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: ALPHA, bits: "31:24", reset: 0}]}
+      - {name: CKEY1_LO, index: 0x12, desc: "Colour key 1 low bound and enable.",  fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: EN, bits: "31", reset: 0}]}
+      - {name: CKEY1_HI, index: 0x13, desc: "Colour key 1 high bound and alpha.", fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: ALPHA, bits: "31:24", reset: 0}]}
+      - {name: CKEY2_LO, index: 0x14, desc: "Colour key 2 low bound and enable.",  fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: EN, bits: "31", reset: 0}]}
+      - {name: CKEY2_HI, index: 0x15, desc: "Colour key 2 high bound and alpha.", fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: ALPHA, bits: "31:24", reset: 0}]}
+      - {name: CKEY3_LO, index: 0x16, desc: "Colour key 3 low bound and enable.",  fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: EN, bits: "31", reset: 0}]}
+      - {name: CKEY3_HI, index: 0x17, desc: "Colour key 3 high bound and alpha.", fields: [{name: B, bits: "7:0", reset: 0}, {name: G, bits: "15:8", reset: 0}, {name: R, bits: "23:16", reset: 0}, {name: ALPHA, bits: "31:24", reset: 0}]}
+      - {name: GRAD_UP,    index: 0x18, desc: "Radial gradient U x coefficient (rendering.md 10.4).", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_UQ,    index: 0x19, desc: "Radial gradient U y coefficient.", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_UR,    index: 0x1A, desc: "Radial gradient U constant, bits 31:0 of 48-bit signed.", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_UR_HI, index: 0x1B, desc: "Radial gradient U constant, bits 47:32.", fields: [{name: V, bits: "15:0", reset: 0}]}
+      - {name: GRAD_VP,    index: 0x1C, desc: "Radial gradient V x coefficient (rendering.md 10.4).", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_VQ,    index: 0x1D, desc: "Radial gradient V y coefficient.", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_VR,    index: 0x1E, desc: "Radial gradient V constant, bits 31:0 of 48-bit signed.", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_VR_HI, index: 0x1F, desc: "Radial gradient V constant, bits 47:32.", fields: [{name: V, bits: "15:0", reset: 0}]}
+      - {name: SRC_ADDR,   index: 0x20, desc: "Source image GPU address.", fields: [{name: ADDR, bits: "31:0", reset: 0}]}
+      - {name: SRC_STRIDE, index: 0x21, desc: "Source stride in bytes.",   fields: [{name: STRIDE, bits: "15:0", reset: 0}]}
+      - name: SRC_SIZE
+        index: 0x22
+        desc: Source image dimensions (1..8192).
+        fields:
+          - {name: W, bits: "13:0",  reset: 0}
+          - {name: H, bits: "29:16", reset: 0}
+      - name: SRC_FMT
+        index: 0x23
+        desc: Source pixel format and options.
+        fields:
+          - {name: FMT,          bits: "7:0", reset: 0}
+          - {name: FORCE_OPAQUE, bits: "8",   reset: 0, desc: "Source alpha forced to 255 (VG_LITE_IMAGE_OPAQUE)."}
+          - {name: SUB_ORDER,    bits: "9",   reset: 0, desc: "Sub-byte sources: 0 first pixel in the low bits, 1 in the high bits (rendering.md 3.5)."}
+          - {name: TRANSPARENT,  bits: "10",  reset: 0, desc: "Skip pixels whose sampled source has A = 0 (rendering.md 5.2 step 6)."}
+          - {name: YUV_709,      bits: "11",  reset: 0, desc: "YUV sources: BT.709 (else BT.601) limited range (rendering.md 3.7, v1.6b)."}
+          - {name: UV_SWAP,      bits: "12",  reset: 0, desc: "YUV sources: U and V exchanged (VG_LITE_SWIZZLE_VU, v1.6b)."}
+          - {name: YUV_FULL,     bits: "13",  reset: 0, desc: "Reserved for full-range YUV (not implemented): must be 0, 1 is BAD_STATE (rendering.md 3.7, 13.1)."}
+      - name: SRC_RECT_MIN
+        index: 0x24
+        desc: Source sub-rectangle, inclusive minimum.
+        fields:
+          - {name: X0, bits: "13:0",  reset: 0}
+          - {name: Y0, bits: "29:16", reset: 0}
+      - name: SRC_RECT_MAX
+        index: 0x25
+        desc: Source sub-rectangle, exclusive maximum.
+        fields:
+          - {name: X1, bits: "13:0",  reset: 0}
+          - {name: Y1, bits: "29:16", reset: 0}
+      - {name: BORDER_COLOR, index: 0x26, desc: "Texel colour outside the source rectangle under WRAP = COLOR, ARGB32 (rendering.md 7.5).", fields: [{name: ARGB, bits: "31:0", reset: 0}]}
+      - {name: CLUT_ADDR,    index: 0x27, desc: "Colour table (256 x ARGB32) GPU address for indexed sources, 4-byte aligned (rendering.md 3.5).", fields: [{name: ADDR, bits: "31:0", reset: 0}]}
+      - {name: XF_A, index: 0x28, desc: "Inverse transform u row, x coefficient (s15.16).", fields: [{name: V, bits: "31:0", reset: 0x00010000}]}
+      - {name: XF_B, index: 0x29, desc: "Inverse transform u row, y coefficient (s15.16).", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: XF_C, index: 0x2A, desc: "Inverse transform u row, constant (s15.16).",      fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: XF_D, index: 0x2B, desc: "Inverse transform v row, x coefficient (s15.16).", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: XF_E, index: 0x2C, desc: "Inverse transform v row, y coefficient (s15.16).", fields: [{name: V, bits: "31:0", reset: 0x00010000}]}
+      - {name: XF_F, index: 0x2D, desc: "Inverse transform v row, constant (s15.16).",      fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: XF_G, index: 0x2E, desc: "Inverse transform w row, x coefficient (s1.30).",  fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: XF_H, index: 0x2F, desc: "Inverse transform w row, y coefficient (s1.30).",  fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: XF_I, index: 0x30, desc: "Inverse transform w row, constant (s1.30).",       fields: [{name: V, bits: "31:0", reset: 0x40000000}]}
+      - name: COLOR_CTRL
+        index: 0x40
+        desc: Colour unit on the filtered image colour (rendering.md 5.2.1, v1.6b). Bit 3 earmarked for a future un-premultiply-first mode.
+        fields:
+          - {name: EN,    bits: "0",   reset: 0, desc: "4 x 5 matrix COLOR_M / COLOR_B."}
+          - {name: GAMMA, bits: "2:1", reset: 0, desc: "0 none, 1 sRGB to linear, 2 linear to sRGB (3: BAD_STATE)."}
+      - name: COLOR_M0
+        index: 0x41
+        desc: "Colour matrix row A: coefficients of A and R, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[A][A]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[A][R]."}
+      - name: COLOR_M1
+        index: 0x42
+        desc: "Colour matrix row A: coefficients of G and B, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[A][G]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[A][B]."}
+      - name: COLOR_M2
+        index: 0x43
+        desc: "Colour matrix row R: coefficients of A and R, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[R][A]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[R][R]."}
+      - name: COLOR_M3
+        index: 0x44
+        desc: "Colour matrix row R: coefficients of G and B, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[R][G]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[R][B]."}
+      - name: COLOR_M4
+        index: 0x45
+        desc: "Colour matrix row G: coefficients of A and R, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[G][A]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[G][R]."}
+      - name: COLOR_M5
+        index: 0x46
+        desc: "Colour matrix row G: coefficients of G and B, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[G][G]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[G][B]."}
+      - name: COLOR_M6
+        index: 0x47
+        desc: "Colour matrix row B: coefficients of A and R, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[B][A]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[B][R]."}
+      - name: COLOR_M7
+        index: 0x48
+        desc: "Colour matrix row B: coefficients of G and B, signed s7.8 (256 = 1.0)."
+        fields:
+          - {name: C0, bits: "15:0",  reset: 0, desc: "M[B][G]."}
+          - {name: C1, bits: "31:16", reset: 0, desc: "M[B][B]."}
+      - {name: COLOR_B0, index: 0x49, desc: "Colour matrix bias of A, signed, 1/256 channel steps.", fields: [{name: BIAS, bits: "19:0", reset: 0}]}
+      - {name: COLOR_B1, index: 0x4A, desc: "Colour matrix bias of R, signed, 1/256 channel steps.", fields: [{name: BIAS, bits: "19:0", reset: 0}]}
+      - {name: COLOR_B2, index: 0x4B, desc: "Colour matrix bias of G, signed, 1/256 channel steps.", fields: [{name: BIAS, bits: "19:0", reset: 0}]}
+      - {name: COLOR_B3, index: 0x4C, desc: "Colour matrix bias of B, signed, 1/256 channel steps.", fields: [{name: BIAS, bits: "19:0", reset: 0}]}
+      - {name: SRC_PLANE1_ADDR, index: 0x3D, desc: "YUV plane 1 (U V / U plane) address (rendering.md 3.7, v1.6b).", fields: [{name: ADDR, bits: "31:0", reset: 0}]}
+      - {name: SRC_PLANE2_ADDR, index: 0x3E, desc: "YUV plane 2 (V / alpha plane) address (rendering.md 3.7, v1.6b).", fields: [{name: ADDR, bits: "31:0", reset: 0}]}
+      - name: SRC_PLANE_STRIDE
+        index: 0x3F
+        desc: YUV plane strides in bytes (rendering.md 3.7, v1.6b).
+        fields:
+          - {name: S1, bits: "15:0",  reset: 0}
+          - {name: S2, bits: "31:16", reset: 0}
+      - {name: MASK_ADDR,   index: 0x31, desc: "Mask layer (A8) GPU address, any alignment (rendering.md 6.1, v1.6).", fields: [{name: ADDR, bits: "31:0", reset: 0}]}
+      - {name: MASK_STRIDE, index: 0x32, desc: "Mask layer stride in bytes.", fields: [{name: STRIDE, bits: "15:0", reset: 0}]}
+      - name: MASK_SIZE
+        index: 0x33
+        desc: Mask layer dimensions (1..8192).
+        fields:
+          - {name: W, bits: "13:0",  reset: 0}
+          - {name: H, bits: "29:16", reset: 0}
+      - name: MASK_ORIGIN
+        index: 0x34
+        desc: Target position of mask pixel (0, 0), signed 16-bit each.
+        fields:
+          - {name: X, bits: "15:0",  reset: 0}
+          - {name: Y, bits: "31:16", reset: 0}
+      - name: BLEND_FUNC
+        index: 0x36
+        desc: Porter-Duff blend (BLEND.FAMILY = 3, rendering.md 5.7, v1.6).
+        fields:
+          - {name: FSA, bits: "3:0",   reset: 0, desc: "Source alpha factor."}
+          - {name: FSC, bits: "8:4",   reset: 0, desc: "Source colour factor."}
+          - {name: FDA, bits: "12:9",  reset: 0, desc: "Destination alpha factor."}
+          - {name: FDC, bits: "17:13", reset: 0, desc: "Destination colour factor."}
+          - {name: EQ,  bits: "20:18", reset: 0, desc: "Equation: 0 ADD, 1 SUB, 2 REVERSE_SUB, 3 MIN, 4 MAX."}
+          - {name: SCM, bits: "24:21", reset: 0, desc: "Source channel mode (0..10, 15 bypass)."}
+          - {name: DCM, bits: "28:25", reset: 0, desc: "Destination channel mode (0..10, 15 bypass)."}
+      - name: MASK_CTRL
+        index: 0x35
+        desc: Mask layer control (rendering.md 6.1).
+        fields:
+          - {name: EN, bits: "0", reset: 0, desc: "Multiply every draw's coverage by the mask."}
+      - {name: GRAD_P, index: 0x38, desc: "Gradient T x coefficient (rendering.md 10).", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_Q, index: 0x39, desc: "Gradient T y coefficient.",                   fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_R, index: 0x3A, desc: "Gradient T constant, bits 31:0 of 48-bit signed.", fields: [{name: V, bits: "31:0", reset: 0}]}
+      - {name: GRAD_RAMP_ADDR, index: 0x3B, desc: "Gradient ramp (256 x ARGB32) GPU address, 4-byte aligned.", fields: [{name: ADDR, bits: "31:0", reset: 0}]}
+      - {name: GRAD_R_HI, index: 0x3C, desc: "Gradient T constant, bits 47:32 of 48-bit signed (rendering.md 10.1).", fields: [{name: V, bits: "15:0", reset: 0}]}
+
+# Command and state constants (commands.md, rendering.md): generated into the C header as
+# G2D_<prefix>_<NAME>; dv/common/g2d_cmd.py reads them from here. The RTL package (rtl/pkg/g2d_pkg.sv) and
+# the golden model keep their own copies, checked against this list by scripts/tests/test_constants.py.
+constants:
+  opcode:   {prefix: OP, desc: "Command opcodes (commands.md 2)",
+             values: {NOP: 0x00, LOAD_STATE: 0x01, DRAW_RECT: 0x10, DRAW_PATH: 0x11, FENCE: 0x20}}
+  format:   {prefix: FMT, desc: "Pixel format codes, TGT_FMT / SRC_FMT (rendering.md 3.2)",
+             values: {A8: 0x00, L8: 0x01, RGB565: 0x02, BGR565: 0x12, RGBA8888: 0x03, BGRA8888: 0x13,
+                      ARGB8888: 0x23, ABGR8888: 0x33, RGBX8888: 0x43, BGRX8888: 0x53, XRGB8888: 0x63,
+                      XBGR8888: 0x73,
+                      RGBA4444: 0x04, BGRA4444: 0x14, ARGB4444: 0x24, ABGR4444: 0x34,
+                      RGBA5551: 0x05, BGRA5551: 0x15, ARGB1555: 0x25, ABGR1555: 0x35,
+                      RGBA2222: 0x06, BGRA2222: 0x16, ARGB2222: 0x26, ABGR2222: 0x36,
+                      A4: 0x07, A2: 0x08, A1: 0x09, L4: 0x0A, I8: 0x0B, I4: 0x0C, I2: 0x0D, I1: 0x0E,
+                      A8L8: 0x0F,
+                      RGB888: 0x80, BGR888: 0x90, ARGB8565: 0x81, ABGR8565: 0x91, RGBA5658: 0x82, BGRA5658: 0x92,
+                      YUY2: 0x83, AYUY2: 0xC3, NV12: 0x84, ANV12: 0xC4, NV16: 0x94, NV24: 0xA4,
+                      YV12: 0x85, YV16: 0x95, YV24: 0xA5}}
+  blend:    {prefix: BLEND, desc: "BLEND.MODE (rendering.md 5.6)",
+             values: {NONE: 0, SRC_OVER: 1, DST_OVER: 2, SRC_IN: 3, DST_IN: 4, MULTIPLY: 5, SCREEN: 6,
+                      DARKEN: 7, LIGHTEN: 8, ADDITIVE: 9, SUBTRACT: 10, NORMAL_LVGL: 11, ADDITIVE_LVGL: 12,
+                      SUBTRACT_LVGL: 13, DIFFERENCE_LVGL: 14, MULTIPLY_LVGL: 15}}
+  paint:    {prefix: PAINT, desc: "PAINT_CTRL.SRC", values: {SOLID: 0, IMAGE: 1, GRAD: 2, RADIAL: 3}}
+  alpha:    {prefix: ALPHA, desc: "ALPHA_CTRL source / destination modes (rendering.md 5.3)",
+             values: {NORMAL: 0, GLOBAL: 1, SCALED: 2}}
+  spread:   {prefix: SPREAD, desc: "PAINT_CTRL.SPREAD (rendering.md 10)", values: {PAD: 0, REPEAT: 1, REFLECT: 2, FILL: 3}}
+  wrap:     {prefix: WRAP, desc: "PAINT_CTRL.WRAP (rendering.md 7.5)", values: {NONE: 0, COLOR: 1, PAD: 2, REPEAT: 3, REFLECT: 4}}

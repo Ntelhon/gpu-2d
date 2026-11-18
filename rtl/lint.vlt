@@ -1,0 +1,17 @@
+`verilator_config
+// Lint waivers. Every waiver names one rule and the narrowest file pattern, with a reason.
+
+// Generated packages define every offset/index/field constant from spec/regs.yaml for use by any
+// module and by the C/Python side; a given compile unit only uses some of them.
+lint_off -rule UNUSEDPARAM -file "*pkg/generated/g2d_csr_pkg.sv"
+lint_off -rule UNUSEDPARAM -file "*pkg/generated/g2d_state_pkg.sv"
+
+// g2d_pkg holds shared constants (not every unit uses all of them) and arithmetic functions whose
+// full-width intermediates and format arguments are only partly used by design (the package has no
+// signals of its own, so these warnings can only concern function locals and arguments).
+lint_off -rule UNUSEDPARAM -file "*rtl/pkg/g2d_pkg.sv"
+lint_off -rule UNUSEDSIGNAL -file "*rtl/pkg/g2d_pkg.sv"
+
+// v1.7 reset distribution stage: its flops shift a 1 in (synchronous data) and drive asynchronous clears (that is
+// the purpose of the block).
+lint_off -rule SYNCASYNCNET -file "*rtl/common/g2d_rst_sync.sv"

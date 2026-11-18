@@ -1,0 +1,29 @@
+# SymbiYosys proof of g2d_cdc_fifo (verification-plan.md CDC-05). Run: make formal (uses $OSS_CAD).
+[tasks]
+prove_d2  prove d2
+prove_d8  prove d8
+prove_s3  prove s3
+cover_d2  cover d2
+
+[options]
+prove: mode prove
+prove: depth 24
+cover: mode cover
+cover: depth 40
+multiclock on
+
+[engines]
+prove: abc pdr
+cover: smtbmc boolector
+
+[script]
+plugin -i slang
+d2: read_slang -G LOG_DEPTH=1 -G SYNC_STAGES=2 --top g2d_cdc_fifo_fv g2d_sync.sv g2d_cdc_fifo.sv g2d_cdc_fifo_fv.sv
+d8: read_slang -G LOG_DEPTH=3 -G SYNC_STAGES=2 --top g2d_cdc_fifo_fv g2d_sync.sv g2d_cdc_fifo.sv g2d_cdc_fifo_fv.sv
+s3: read_slang -G LOG_DEPTH=2 -G SYNC_STAGES=3 --top g2d_cdc_fifo_fv g2d_sync.sv g2d_cdc_fifo.sv g2d_cdc_fifo_fv.sv
+prep -top g2d_cdc_fifo_fv
+
+[files]
+../../rtl/cdc/g2d_sync.sv
+../../rtl/cdc/g2d_cdc_fifo.sv
+g2d_cdc_fifo_fv.sv

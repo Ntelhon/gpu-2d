@@ -1,0 +1,44 @@
+G2D licensing
+=============
+
+Copyright 2026 The G2D authors.
+
+The project's own work is released under two licences. Every source file names its licence on one of its first
+lines as an SPDX identifier (https://spdx.org/licenses/); the full texts are in LICENSES/.
+
+  Hardware descriptions                SPDX: Apache-2.0 WITH SHL-2.1
+    SystemVerilog RTL, testbench and   Solderpad Hardware License v2.1           LICENSES/SHL-2.1.txt
+    integration RTL, timing            (a wraparound of the Apache License 2.0)   LICENSES/Apache-2.0.txt
+    constraints (*.sv, *.svh, *.sdc,
+    *.xdc)
+
+  Everything else                      SPDX: Apache-2.0
+    C / C++ / Python / shell / Tcl /   Apache License 2.0                         LICENSES/Apache-2.0.txt
+    build files, golden model, driver,
+    scripts, tests, specifications and
+    documentation
+
+The Solderpad Hardware License v2.1 is listed by SPDX as an exception to the Apache License 2.0, hence the
+expression "Apache-2.0 WITH SHL-2.1". Recipients may, at their option, treat hardware files as released under the
+Apache License 2.0 alone (LICENSES/SHL-2.1.txt).
+
+Dual-licensed paths of the project's own work (so that the Linux kernel can use them):
+
+  sw/linux/                            GPL-2.0-only OR MIT
+                                       Linux kernel driver, uapi header, Kbuild (the module uses GPL-only kernel
+                                       symbols; MODULE_LICENSE("Dual MIT/GPL"))
+  sw/linux/bindings/                   GPL-2.0-only OR BSD-2-Clause (the kernel's rule for devicetree bindings)
+  sw/include/generated/g2d_regs.h      Apache-2.0 OR MIT (generated register header, included by the kernel driver)
+
+Third-party material keeps its own licence (details in THIRD_PARTY.md):
+
+  sw/apps/doom/                        GPL-2.0-or-later (links with doomgeneric)
+  sw/include/vg_lite.h                 MIT (the public VGLite API header; its own copyright notice)
+  fpga/cheshire/axi_vga_g2d/           SHL-0.51 (its own LICENSE file; also LICENSES/SHL-0.51.txt)
+  fpga/cheshire/cheshire-g2d.patch     changes to Cheshire, under Cheshire's licence (SHL-0.51)
+
+Licence texts in LICENSES/: Apache-2.0, SHL-2.1, SHL-0.51, MIT, BSD-2-Clause, GPL-2.0-only, GPL-2.0-or-later.
+
+Unless required by applicable law or agreed to in writing, the material in this repository is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the licence texts for
+the specific language governing permissions and limitations.

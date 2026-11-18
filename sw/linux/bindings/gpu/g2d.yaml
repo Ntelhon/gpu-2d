@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpu/g2d.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: G2D 2D / 2.5D GPU
+
+maintainers:
+  - G2D maintainers <maintainers@g2d.invalid>
+
+description: |
+  2D / 2.5D vector graphics GPU (VGLite API compatible, docs/INTEGRATION.md). One register window of 4 KB
+  (AXI4-Lite or a bus adapter) and one interrupt (level, active high by default). The GPU masters memory through
+  its own AXI4 port; the Linux driver (sw/linux/g2d_drv.c) confines it to a DMA pool with the GPU's address
+  window registers.
+
+properties:
+  compatible:
+    const: g2d,g2d
+
+  reg:
+    maxItems: 1
+    description: the 4 KB CSR window
+
+  interrupts:
+    maxItems: 1
+
+  dma-coherent: true
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    gpu@48000000 {
+        compatible = "g2d,g2d";
+        reg = <0x48000000 0x1000>;
+        interrupts = <58>;
+    };

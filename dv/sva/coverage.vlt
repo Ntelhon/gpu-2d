@@ -1,0 +1,4 @@
+`verilator_config
+// Code coverage (G2D_CODE_COV=1) measures rtl/ only: test benches, generated wrappers and checkers are off.
+coverage_off -file "*dv/*"
+coverage_off -file "*build/dv/tb/*"

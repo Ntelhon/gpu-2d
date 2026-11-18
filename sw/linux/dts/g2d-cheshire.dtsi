@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// G2D in the Cheshire SoC (fpga/cheshire/g2d_chs_pkg.sv: CSR window at 0x4800_0000; external interrupt = PLIC
+// source 58). Include it after cheshire.genesys2.dts (docs/PROGRAMMING.md §7.2).
+&soc {
+  gpu@48000000 {
+    compatible = "g2d,g2d";
+    reg = <0x0 0x48000000 0x0 0x1000>;
+    interrupt-parent = <&PLIC0>;
+    interrupts = <58>;
+  };
+};

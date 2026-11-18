@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Lint waivers for generated gate-level netlists (scripts/gls_netlist.py output under build/dv/gls), used by
+// dv/tests/test_gls_ihp.py. Generated logic is not held to the RTL's -Wall rules.
+`verilator_config
+lint_off -file "*/build/dv/gls/*"
+lint_off -file "*/build/dv/sv2v_unit/*"

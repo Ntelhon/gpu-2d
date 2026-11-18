@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only OR MIT
+obj-m := g2d.o
+g2d-y := g2d_drv.o
+ccflags-y := -I$(src) -I$(src)/../include

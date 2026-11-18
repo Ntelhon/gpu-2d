@@ -1,0 +1,38 @@
+diff --git a/hw/cheshire_soc.sv b/hw/cheshire_soc.sv
+index e09054f..3259fd2 100644
+--- a/hw/cheshire_soc.sv
++++ b/hw/cheshire_soc.sv
+@@ -21,7 +21,10 @@ module cheshire_soc import cheshire_pkg::*; #(
+   parameter type axi_ext_slv_req_t  = logic,
+   parameter type axi_ext_slv_rsp_t  = logic,
+   parameter type reg_ext_req_t      = logic,
+-  parameter type reg_ext_rsp_t      = logic
++  parameter type reg_ext_rsp_t      = logic,
++  // G2D: end of the LLC's cached region (default: all of LlcOut). DRAM above it is reached through the LLC's bypass
++  // (no allocation), e.g. for frame buffers that would only thrash the LLC.
++  parameter longint unsigned LlcCachedRegionEnd = Cfg.LlcOutRegionEnd
+ ) (
+   input  logic        clk_i,
+   input  logic        rst_ni,
+@@ -562,7 +565,7 @@ module cheshire_soc import cheshire_pkg::*; #(
+       .conf_req_i          ( reg_out_req[RegOut.llc] ),
+       .conf_resp_o         ( reg_out_rsp[RegOut.llc] ),
+       .cached_start_addr_i ( addr_t'(Cfg.LlcOutRegionStart) ),
+-      .cached_end_addr_i   ( addr_t'(Cfg.LlcOutRegionEnd)   ),
++      .cached_end_addr_i   ( addr_t'(LlcCachedRegionEnd)    ),   // G2D
+       .spm_start_addr_i    ( addr_t'(SPM_BASE_ADDR) ),
+       .axi_llc_events_o    ( /* TODO: connect me to regs? */ )
+     );
+diff --git a/hw/rv_plic.cfg.hjson b/hw/rv_plic.cfg.hjson
+index 865be3a..8eca46d 100644
+--- a/hw/rv_plic.cfg.hjson
++++ b/hw/rv_plic.cfg.hjson
+@@ -7,7 +7,7 @@
+ {
+     instance_name: "rv_plic",
+     param_values: {
+-        src: 58,
++        src: 59,  // G2D: one external interrupt (58 internal + 1)
+         target: 2,  // We need *two targets* per hart: M and S modes
+         prio: 7,
+         nonstd_regs: 0  // Do *not* include these: MSIPs are not used and we use a 64 MiB address space

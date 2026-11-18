@@ -1,0 +1,12 @@
+`verilator_config
+// Lint waivers for the simulation-only checkers in dv/sva (never for rtl/).
+
+// Concurrent assertions use `disable iff (!rst_ni)`, a synchronous use of the reset, while the checkers'
+// bookkeeping registers use it asynchronously like the RTL they observe.
+lint_off -rule SYNCASYNCNET -file "*dv/sva/*"
+// `bit armed = 1'b0` then set by the first reset: the declaration value must win over --x-initial
+lint_off -rule PROCASSINIT -file "*dv/sva/*"
+// The checkers are bound with `.*` and observe whole interfaces, of which they check only some bits (e.g. the
+// window and base registers in g2d_axi_sva). Builds with --public-flat-rw (cocotb) never report this; the
+// live backend (dv/live, no public signals) does.
+lint_off -rule UNUSEDSIGNAL -file "*dv/sva/*"

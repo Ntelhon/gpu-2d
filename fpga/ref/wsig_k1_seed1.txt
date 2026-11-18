@@ -1,0 +1,27 @@
+# Generated from the v1.8 SoC simulation (scripts/socsim_sweep.py --delays 0 --ddr, build/fpga/socsim_v18,
+# 2026-11-12); do not edit. Write-signature reference for scripts/fpga_check.py --wsig-ref, valid for a board test
+# built with FPGA_SCENES_ARGS="--per-kind 1 --seed 1" (scene order below) and a full-feature G2D (FEATURES
+# default). The same signatures came out with the LLC in cache mode (build/fpga/socsim_v18_llc) and in the
+# one-binary run (scenes 0-5), so they do not depend on memory timing.
+SCENE 0 clears_0
+SCENE_END 0 ret=0 busy=10693 draws=9 wsig=908b6a60 coll=00
+SCENE 1 blits_0
+SCENE_END 1 ret=0 busy=18077 draws=4 wsig=30baed2f coll=00
+SCENE 2 paths_0
+SCENE_END 2 ret=0 busy=1485 draws=3 wsig=8cd500d3 coll=00
+SCENE 3 patterns_0
+SCENE_END 3 ret=0 busy=103149 draws=16 wsig=466315f3 coll=00
+SCENE 4 converted_0
+SCENE_END 4 ret=0 busy=34334 draws=5 wsig=1befdd74 coll=00
+SCENE 5 strokes_0
+SCENE_END 5 ret=0 busy=26994 draws=5 wsig=aa29399c coll=00
+SCENE 6 vectors_0
+SCENE_END 6 ret=0 busy=60885 draws=8 wsig=f4e211f6 coll=00
+SCENE 7 radial_0
+SCENE_END 7 ret=0 busy=27969 draws=6 wsig=82474734 coll=00
+SCENE 8 imgpaths_0
+SCENE_END 8 ret=0 busy=29458 draws=6 wsig=5608ed93 coll=00
+SCENE 9 v16_0
+SCENE_END 9 ret=0 busy=6653 draws=35 wsig=f48e5008 coll=00
+SCENE 10 v16b_0
+SCENE_END 10 ret=0 busy=11308 draws=6 wsig=e45db8e2 coll=00

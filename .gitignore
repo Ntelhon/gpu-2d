@@ -1,0 +1,65 @@
+# Build outputs
+build/
+obj_dir/
+sim_build/
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.hex
+*.map
+__pycache__/
+*.pyc
+.pytest_cache/
+results.xml
+*.result.xml
+*.egg-info/
+
+# Waveforms and sim artifacts
+*.vcd
+*.fst
+*.fst.hier
+*.ghw
+*.wdb
+*.wcfg.bak
+
+# Generated files: the RTL / C outputs of scripts/gen_regs.py, gen_wrappers.py and gen_packaging.py (*/generated/,
+# g2d.core, Bender.yml, ipxact/) are committed (user 2026-11-12); `make regs` rewrites them, `make regs-check` fails
+# if a committed copy is stale.
+gen/
+
+# Images produced by tests (reference vectors live under */refs/ and are whitelisted there)
+*.png
+!**/refs/**/*.png
+
+# Vivado / synthesis
+*.jou
+*.log
+*.str
+.Xil/
+*.cache/
+*.hw/
+*.runs/
+*.sim/
+*.ip_user_files/
+*.dcp
+*.bit
+*.ltx
+vivado_*.backup.*
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# NXP-derived research: local only, never committed (user 2026-10-18, source provenance)
+docs/research/GPU open questions industry research.md
+docs/research/notes/api_semantics.md
+docs/research/notes/fpga_linux_asic.md
+docs/research/notes/hw_features.md
+
+# CVA6 instruction trace of the Verilator SoC simulation
+trace_hart_*.dasm

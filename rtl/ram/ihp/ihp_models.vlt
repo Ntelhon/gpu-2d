@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+// Lint waivers for the IHP SG13G2 SRAM simulation models (third-party PDK files, not changed here), used with
+// rtl/ram/ihp in dv/tests/test_ram_variants.py. Our own sources stay -Wall clean.
+`verilator_config
+lint_off -file "*/sg13g2_sram/verilog/*"
+lint_off -rule STMTDLY -file "*/sg13g2_sram/verilog/*"
