@@ -43,7 +43,6 @@
 | [AUDIT_2026-11.md](AUDIT_2026-11.md) | Repository audit and industry comparison (2026-11) |
 | [LVGL_SURVEY.md](LVGL_SURVEY.md) | LVGL 9.6 use of the VGLite API |
 | [PROJECT_RULES.md](PROJECT_RULES.md) | Engineering rules (summary for contributors: `CONTRIBUTING.md`) |
-| [HANDOFF.md](HANDOFF.md) | Development log between work sessions |
 | [research/notes/](research/notes/) | Design research notes |
 
 Release history: [CHANGELOG.md](../CHANGELOG.md).
